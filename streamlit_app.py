@@ -68,14 +68,24 @@ def fetch_nearby(address):
 );
 out center;"""
 
-    try:
-        ov_res = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=35)
-        ov_res.raise_for_status()
-        ov = ov_res.json()
-    except requests.exceptions.JSONDecodeError:
-        return None, "周辺施設検索サービスの応答が不正です。しばらく待ってから再試行してください。"
-    except requests.exceptions.RequestException as e:
-        return None, f"周辺施設検索の通信エラー: {e}"
+    overpass_endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter",
+    ]
+    ov = None
+    last_error = None
+    for endpoint in overpass_endpoints:
+        try:
+            ov_res = requests.post(endpoint, data=query, timeout=30)
+            ov_res.raise_for_status()
+            ov = ov_res.json()
+            break
+        except Exception as e:
+            last_error = e
+            continue
+    if ov is None:
+        return None, f"周辺施設検索に失敗しました（全サーバーが混雑中）。しばらく待ってから再試行してください。"
     shops, edus, meds, parks = [], [], [], []
 
     for el in ov.get("elements", []):

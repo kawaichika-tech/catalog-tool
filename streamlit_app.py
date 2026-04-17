@@ -36,14 +36,22 @@ def get_name(tags):
     return tags.get("name:ja") or tags.get("name") or tags.get("brand")
 
 def fetch_nearby(address):
-    geo = requests.get(
-        "https://nominatim.openstreetmap.org/search",
-        params={"q": address, "format": "json", "limit": 1, "accept-language": "ja"},
-        headers={"User-Agent": "CatalogTool/1.0"},
-        timeout=10
-    ).json()
+    try:
+        geo_res = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": address, "format": "json", "limit": 1, "accept-language": "ja"},
+            headers={"User-Agent": "CatalogTool/1.0 (kawaichika@kaedekoumuten.jp)"},
+            timeout=10
+        )
+        geo_res.raise_for_status()
+        geo = geo_res.json()
+    except requests.exceptions.JSONDecodeError:
+        return None, f"住所検索サービスの応答が不正です（ステータス: {geo_res.status_code}）。しばらく待ってから再試行してください。"
+    except requests.exceptions.RequestException as e:
+        return None, f"住所検索の通信エラー: {e}"
+
     if not geo:
-        return None, "住所が見つかりませんでした。より詳しい住所を入力してください。"
+        return None, "住所が見つかりませんでした。都道府県から入力してください。"
 
     lat, lon = float(geo[0]["lat"]), float(geo[0]["lon"])
     radius = 1200
@@ -60,7 +68,14 @@ def fetch_nearby(address):
 );
 out center;"""
 
-    ov = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=35).json()
+    try:
+        ov_res = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=35)
+        ov_res.raise_for_status()
+        ov = ov_res.json()
+    except requests.exceptions.JSONDecodeError:
+        return None, "周辺施設検索サービスの応答が不正です。しばらく待ってから再試行してください。"
+    except requests.exceptions.RequestException as e:
+        return None, f"周辺施設検索の通信エラー: {e}"
     shops, edus, meds, parks = [], [], [], []
 
     for el in ov.get("elements", []):

@@ -1,0 +1,7 @@
+Claude.html
+Claude_files/
+catalog_tool.html
+.env
+__pycache__/
+*.pyc
+.streamlit/secrets.toml

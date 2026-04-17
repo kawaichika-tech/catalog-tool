@@ -38,22 +38,22 @@ def get_name(tags):
 def fetch_nearby(address):
     try:
         geo_res = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"q": address, "format": "json", "limit": 1, "accept-language": "ja"},
-            headers={"User-Agent": "CatalogTool/1.0 (kawaichika@kaedekoumuten.jp)"},
+            "https://msearch.gsi.go.jp/address-search/AddressSearch",
+            params={"q": address},
             timeout=10
         )
         geo_res.raise_for_status()
         geo = geo_res.json()
     except requests.exceptions.JSONDecodeError:
-        return None, f"住所検索サービスの応答が不正です（ステータス: {geo_res.status_code}）。しばらく待ってから再試行してください。"
+        return None, "住所検索サービスの応答が不正です。しばらく待ってから再試行してください。"
     except requests.exceptions.RequestException as e:
         return None, f"住所検索の通信エラー: {e}"
 
     if not geo:
         return None, "住所が見つかりませんでした。都道府県から入力してください。"
 
-    lat, lon = float(geo[0]["lat"]), float(geo[0]["lon"])
+    coords = geo[0]["geometry"]["coordinates"]
+    lon, lat = float(coords[0]), float(coords[1])
     radius = 1200
     query = f"""[out:json][timeout:30];
 (

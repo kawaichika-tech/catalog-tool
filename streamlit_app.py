@@ -168,6 +168,153 @@ def build_jsx(data_obj):
     }}
 }})();"""
 
+def fetch_nearest_station(lat, lon):
+    query = f"""[out:json][timeout:20];
+(
+  node["railway"~"station|halt"](around:3000,{lat},{lon});
+);
+out body;"""
+    overpass_endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter",
+    ]
+    for endpoint in overpass_endpoints:
+        try:
+            res = requests.post(endpoint, data=query, timeout=25)
+            res.raise_for_status()
+            data = res.json()
+            break
+        except Exception:
+            data = None
+    if not data:
+        return None
+
+    stations = []
+    for el in data.get("elements", []):
+        tags = el.get("tags", {})
+        name = tags.get("name:ja") or tags.get("name")
+        if not name:
+            continue
+        dist = haversine(lat, lon, el["lat"], el["lon"])
+        operator = tags.get("operator", "")
+        stations.append({"name": name, "dist": dist, "walk": to_walk_min(dist), "operator": operator})
+
+    if not stations:
+        return None
+    nearest = sorted(stations, key=lambda x: x["dist"])[0]
+    prefix = f"{nearest['operator']}「" if nearest["operator"] else "「"
+    return f"{prefix}{nearest['name']}」駅 徒歩{nearest['walk']}分"
+
+def fetch_nearby_detailed(lat, lon):
+    radius = 1200
+    query = f"""[out:json][timeout:30];
+(
+  node["shop"="supermarket"](around:{radius},{lat},{lon});
+  way["shop"="supermarket"](around:{radius},{lat},{lon});
+  node["shop"="convenience"](around:{radius},{lat},{lon});
+  way["shop"="convenience"](around:{radius},{lat},{lon});
+  node["amenity"~"school|kindergarten|university|college"](around:{radius},{lat},{lon});
+  way["amenity"~"school|kindergarten|university|college"](around:{radius},{lat},{lon});
+  node["amenity"~"hospital|clinic|doctors|pharmacy|dentist"](around:{radius},{lat},{lon});
+  way["amenity"~"hospital|clinic|doctors|pharmacy|dentist"](around:{radius},{lat},{lon});
+  node["amenity"="bank"](around:{radius},{lat},{lon});
+  node["leisure"~"park|playground"](around:{radius},{lat},{lon});
+  way["leisure"~"park|playground"](around:{radius},{lat},{lon});
+);
+out center;"""
+
+    overpass_endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter",
+    ]
+    ov = None
+    for endpoint in overpass_endpoints:
+        try:
+            res = requests.post(endpoint, data=query, timeout=35)
+            res.raise_for_status()
+            ov = res.json()
+            break
+        except Exception:
+            continue
+    if not ov:
+        return None, "周辺施設検索に失敗しました。しばらく待ってから再試行してください。"
+
+    supers, convenis, edus, meds = [], [], [], []
+    for el in ov.get("elements", []):
+        tags = el.get("tags", {})
+        name = get_name(tags)
+        if not name:
+            continue
+        el_lat = el.get("lat") or (el.get("center") or {}).get("lat")
+        el_lon = el.get("lon") or (el.get("center") or {}).get("lon")
+        if not el_lat or not el_lon:
+            continue
+        dist = haversine(lat, lon, el_lat, el_lon)
+        entry = {"name": name, "dist": dist, "walk": to_walk_min(dist)}
+        shop    = tags.get("shop", "")
+        amenity = tags.get("amenity", "")
+        leisure = tags.get("leisure", "")
+        if shop == "supermarket":
+            supers.append(entry)
+        elif shop == "convenience":
+            convenis.append(entry)
+        elif re.search(r"school|kindergarten|university|college", amenity):
+            edus.append(entry)
+        elif re.search(r"hospital|clinic|doctors|pharmacy|dentist|bank", amenity) or leisure:
+            meds.append(entry)
+
+    def fmt_cat(arr, n):
+        return "\r".join(f"{e['name']} 徒歩{e['walk']}分"
+                         for e in sorted(arr, key=lambda x: x["dist"])[:n])
+
+    parts = []
+    if supers:   parts.append("【スーパー】\r"   + fmt_cat(supers,   3))
+    if convenis: parts.append("【コンビニ】\r"   + fmt_cat(convenis, 3))
+    if edus:     parts.append("【教育】\r"       + fmt_cat(edus,     3))
+    if meds:     parts.append("【医療・その他】\r" + fmt_cat(meds,     4))
+
+    return "\r\r".join(parts), None
+
+def build_jsx_step2(filename, data_obj):
+    lines = []
+    for key, val in data_obj.items():
+        if val is not None and str(val).strip():
+            esc = str(val).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\r")
+            lines.append(f'        "@{key}"      : "{esc}",')
+    body = "\n".join(lines)
+    return f"""/*
+  {filename}
+  データ流し込み用
+*/
+
+(function() {{
+    var doc = app.activeDocument;
+    var count = 0;
+
+    var data = {{
+{body}
+    }};
+
+    for (var i = 0; i < doc.textFrames.length; i++) {{
+        try {{
+            var frame = doc.textFrames[i];
+            if (frame.locked || frame.hidden) continue;
+            if (data[frame.name] !== undefined) {{
+                frame.contents = data[frame.name];
+                count++;
+            }}
+        }} catch(e) {{}}
+    }}
+
+    if (count === 0) {{
+        alert("書き換わった場所がありませんでした。\\nレイヤー名（@titleなど）が正しいか確認してください。");
+    }} else {{
+        alert("完了！\\n" + count + " 箇所のデータを更新しました。(o^―^o)ﾆｺ");
+    }}
+}})();"""
+
 def render_result_tab(page_label, results, jsx_filename):
     if not results:
         st.info("← 「① 入力」タブで情報を入力し、生成してください")
@@ -237,7 +384,7 @@ with st.sidebar:
 
 # ── メインタブ ────────────────────────────────────────────────────────────────
 
-tab_input, tab_p1, tab_p23, tab_p4, tab_p5 = st.tabs(["① 入力", "P1 表紙", "P2-3 エリア", "P4 区画", "P5 物件"])
+tab_input, tab_p1, tab_p23, tab_p4, tab_p5, tab_step2 = st.tabs(["① 入力", "P1 表紙", "P2-3 エリア", "P4 区画", "P5 物件", "② Step2スクリプト"])
 
 with tab_input:
 
@@ -445,3 +592,103 @@ with tab_p4:
 with tab_p5:
     st.markdown("## PAGE 5 — 物件情報")
     render_result_tab("p5", st.session_state["results_p5"], "P5_物件情報_流し込み.jsx")
+
+with tab_step2:
+    st.markdown("## Step2 スクリプト生成（レイヤー名マッチング方式）")
+    st.caption("Illustratorのレイヤー名（@titleなど）に直接データを流し込むスクリプトを生成します")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        s2_title      = st.text_input("① タイトル", placeholder="例: 奈良市右京３丁目６期１号地")
+        s2_completion = st.text_input("② 完成時期", placeholder="例: 令和9年２月")
+        s2_price      = st.text_input("③ 販売価格（万円）", placeholder="例: 4,980")
+        s2_loan       = st.text_input("④ 月々支払い（円）", placeholder="例: 120,694")
+        s2_address    = st.text_input("⑤ 所在地", placeholder="例: 奈良市右京３丁目7-8")
+        s2_school1    = st.text_input("⑥ 小学校区", placeholder="例: 奈良市立ならやま小学校区")
+        s2_school2    = st.text_input("⑦ 中学校区", placeholder="例: 奈良市立ならやま中学校区")
+    with col2:
+        s2_land       = st.text_input("⑨ 土地面積", placeholder="例: 169.24㎡（51.2坪）")
+        s2_house      = st.text_input("⑩ 建物面積", placeholder="例: 104.10㎡（31.5坪）")
+        s2_layout     = st.text_input("⑪ 間取り", placeholder="例: 3LDK")
+        s2_parking    = st.text_input("⑫ 駐車場", placeholder="例: 2台")
+        s2_filename   = st.text_input("ファイル名（.jsx）", placeholder="例: Step2_Ukyo3_6ki1go.jsx", value="Step2_流し込み.jsx")
+
+    st.markdown("### ⑧ 交通 / ⑬ 周辺環境（自動リサーチ）")
+    s2_addr_for_osm = st.text_input("住所（自動リサーチ用）", placeholder="例: 奈良県奈良市右京3丁目7-8",
+                                     help="⑧交通と⑬周辺環境の自動取得に使います")
+
+    if st.button("🗺 交通・周辺環境を自動取得", use_container_width=True):
+        if not s2_addr_for_osm:
+            st.warning("住所を入力してください")
+        else:
+            with st.spinner("住所を検索中…"):
+                try:
+                    geo_res = requests.get(
+                        "https://msearch.gsi.go.jp/address-search/AddressSearch",
+                        params={"q": s2_addr_for_osm}, timeout=10
+                    )
+                    geo_res.raise_for_status()
+                    geo = geo_res.json()
+                except Exception as e:
+                    st.error(f"住所検索エラー: {e}")
+                    geo = []
+
+            if geo:
+                coords = geo[0]["geometry"]["coordinates"]
+                s2_lon, s2_lat = float(coords[0]), float(coords[1])
+
+                with st.spinner("最寄り駅を検索中…"):
+                    station_result = fetch_nearest_station(s2_lat, s2_lon)
+                    if station_result:
+                        st.session_state["s2_traffic"] = station_result
+                    else:
+                        st.warning("駅が見つかりませんでした")
+
+                with st.spinner("周辺施設を検索中…"):
+                    env_result, env_error = fetch_nearby_detailed(s2_lat, s2_lon)
+                    if env_error:
+                        st.error(env_error)
+                    else:
+                        st.session_state["s2_environment"] = env_result
+                        st.success("✅ 自動取得完了（内容を確認・編集してください）")
+                        st.rerun()
+            else:
+                st.error("住所が見つかりませんでした")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        s2_traffic = st.text_area("⑧ 交通", value=st.session_state.get("s2_traffic", ""),
+                                   placeholder="例: 近鉄京都線「高の原」駅 徒歩14分", height=80)
+    with col2:
+        s2_environment = st.text_area("⑬ 周辺環境", value=st.session_state.get("s2_environment", ""),
+                                       placeholder="【スーパー】\nイオン 徒歩10分\n\n【教育】\n○○小学校 徒歩5分",
+                                       height=200)
+
+    st.markdown("---")
+    if st.button("⬇ Step2スクリプト（.jsx）を生成・ダウンロード", type="primary", use_container_width=True):
+        data_obj = {
+            "title":       s2_title,
+            "completion":  s2_completion,
+            "price":       s2_price,
+            "loan":        s2_loan,
+            "address":     s2_address,
+            "school1":     s2_school1,
+            "school2":     s2_school2,
+            "traffic":     s2_traffic,
+            "land_area":   s2_land,
+            "house_area":  s2_house,
+            "layout":      s2_layout,
+            "parking":     s2_parking,
+            "environment": s2_environment,
+        }
+        fname = s2_filename if s2_filename.endswith(".jsx") else s2_filename + ".jsx"
+        jsx_content = build_jsx_step2(fname, data_obj)
+        st.download_button(
+            label=f"⬇ {fname} をダウンロード",
+            data=jsx_content.encode("utf-8"),
+            file_name=fname,
+            mime="text/plain",
+            use_container_width=True,
+            type="primary",
+            key="dl_step2"
+        )

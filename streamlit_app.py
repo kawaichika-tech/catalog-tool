@@ -281,7 +281,7 @@ def build_jsx_step2(filename, data_obj):
     lines = []
     for key, val in data_obj.items():
         if val is not None and str(val).strip():
-            esc = str(val).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\r")
+            esc = str(val).replace("\\", "\\\\").replace('"', '\\"').replace("\r\n", "\\r").replace("\r", "\\r").replace("\n", "\\r")
             lines.append(f'        "@{key}"      : "{esc}",')
     body = "\n".join(lines)
     return f"""/*

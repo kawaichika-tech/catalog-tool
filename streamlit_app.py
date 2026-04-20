@@ -402,16 +402,42 @@ with tab_input:
     st.markdown("### 交通アクセス")
     col1, col2 = st.columns(2)
     with col1:
-        station     = st.text_input("路線名・駅名", placeholder="例: 近鉄橿原線 大和西大寺駅")
+        station    = st.text_input("路線名・駅名", placeholder="例: 近鉄橿原線 大和西大寺駅")
     with col2:
-        walk_min_v  = st.number_input("徒歩時間（分）", min_value=0, max_value=99, value=0)
+        walk_min_v = st.number_input("徒歩時間（分）", min_value=0, max_value=99, value=0)
+
+    if st.button("🚃 京都・天王寺・難波への所要時間を自動計算", use_container_width=True):
+        if not station:
+            st.warning("先に「路線名・駅名」を入力してください")
+        else:
+            api_key = st.session_state.get("api_key", "")
+            if not api_key:
+                st.warning("サイドバーでAPIキーを入力してください")
+            else:
+                with st.spinner("所要時間を計算中…"):
+                    try:
+                        times = call_ai(api_key, f"""「{station}」から以下の駅への電車での所要時間（乗り換え含む標準的な時間）を教えてください。
+- 京都駅
+- 天王寺駅
+- 難波駅（大阪難波駅含む）
+
+JSONのみ返してください:
+{{"kyoto": 所要時間(分・整数), "tennoji": 所要時間(分・整数), "namba": 所要時間(分・整数)}}""", 200)
+                        st.session_state["auto_kyoto"]   = int(times.get("kyoto", 0))
+                        st.session_state["auto_tennoji"] = int(times.get("tennoji", 0))
+                        st.session_state["auto_namba"]   = int(times.get("namba", 0))
+                        st.success(f"✅ 京都:{times.get('kyoto')}分 / 天王寺:{times.get('tennoji')}分 / 難波:{times.get('namba')}分")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"計算エラー: {e}")
+
     col1, col2, col3 = st.columns(3)
     with col1:
-        time_kyoto   = st.number_input("京都まで（分）", min_value=0, value=0)
+        time_kyoto   = st.number_input("京都まで（分）",   min_value=0, value=st.session_state.get("auto_kyoto", 0))
     with col2:
-        time_tennoji = st.number_input("天王寺まで（分）", min_value=0, value=0)
+        time_tennoji = st.number_input("天王寺まで（分）", min_value=0, value=st.session_state.get("auto_tennoji", 0))
     with col3:
-        time_namba   = st.number_input("難波まで（分）", min_value=0, value=0)
+        time_namba   = st.number_input("難波まで（分）",   min_value=0, value=st.session_state.get("auto_namba", 0))
 
     # 周辺施設
     st.markdown("### 周辺施設")

@@ -309,9 +309,9 @@ def build_jsx_step2(filename, data_obj):
     }}
 
     if (count === 0) {{
-        alert("書き換わった場所がありませんでした。\\nレイヤー名（@titleなど）が正しいか確認してください。");
+        alert("No frames updated.\\nCheck layer names (@title, etc.).");
     }} else {{
-        alert("完了！\\n" + count + " 箇所のデータを更新しました。(o^―^o)ﾆｺ");
+        alert("Done! " + count + " frame(s) updated.");
     }}
 }})();"""
 

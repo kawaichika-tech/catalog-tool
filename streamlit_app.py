@@ -392,8 +392,8 @@ with tab_input:
     st.markdown("### 基本情報")
     col1, col2 = st.columns(2)
     with col1:
-        name_jp     = st.text_input("物件名（日本語）", placeholder="例: 奈良市右京３丁目IV")
-        madori      = st.text_input("間取り", placeholder="例: 2LDK＋WIC＋カースペース2台付")
+        name_jp     = st.text_input("物件名（日本語）", placeholder="例: 奈良市右京３丁目IV", key="inp_name_jp")
+        madori      = st.text_input("間取り", placeholder="例: 2LDK＋WIC＋カースペース2台付", key="inp_madori")
     with col2:
         name_en     = st.text_input("英語タイトル", placeholder="例: NARA - UKYO")
         total_units = st.text_input("総戸数", placeholder="例: 限定1棟")
@@ -402,9 +402,9 @@ with tab_input:
     st.markdown("### 交通アクセス")
     col1, col2 = st.columns(2)
     with col1:
-        station    = st.text_input("路線名・駅名", placeholder="例: 近鉄橿原線 大和西大寺駅")
+        station    = st.text_input("路線名・駅名", placeholder="例: 近鉄橿原線 大和西大寺駅", key="inp_station")
     with col2:
-        walk_min_v = st.number_input("徒歩時間（分）", min_value=0, max_value=99, value=0)
+        walk_min_v = st.number_input("徒歩時間（分）", min_value=0, max_value=99, value=0, key="inp_walk_min")
 
     if st.button("🚃 京都・天王寺・難波への所要時間を自動計算", use_container_width=True):
         if not station:
@@ -441,7 +441,7 @@ JSONのみ返してください:
 
     # 周辺施設
     st.markdown("### 周辺施設")
-    address = st.text_input("所在地（OSM自動取得に使用）", placeholder="例: 奈良県奈良市右京3丁目")
+    address = st.text_input("所在地（OSM自動取得に使用）", placeholder="例: 奈良県奈良市右京3丁目", key="inp_address")
 
     if st.button("🗺 住所から周辺施設を自動取得（OpenStreetMap）", use_container_width=True):
         if not address:
@@ -482,12 +482,12 @@ JSONのみ返してください:
     col1, col2 = st.columns(2)
     with col1:
         youto       = st.text_input("用途地域", placeholder="例: 第一種住居地域")
-        price       = st.number_input("販売価格（万円）", min_value=0, value=0)
-        shikichi_m2 = st.number_input("敷地面積（㎡）", min_value=0.0, value=0.0, step=0.01)
+        price       = st.number_input("販売価格（万円）", min_value=0, value=0, key="inp_price")
+        shikichi_m2 = st.number_input("敷地面積（㎡）", min_value=0.0, value=0.0, step=0.01, key="inp_shikichi_m2")
         shikichi_tb = m2_to_tsubo(shikichi_m2)
         if shikichi_tb:
             st.caption(f"✦ {shikichi_tb} 坪")
-        tatemono_m2 = st.number_input("建物面積（㎡）", min_value=0.0, value=0.0, step=0.01)
+        tatemono_m2 = st.number_input("建物面積（㎡）", min_value=0.0, value=0.0, step=0.01, key="inp_tatemono_m2")
         tatemono_tb = m2_to_tsubo(tatemono_m2)
         if tatemono_tb:
             st.caption(f"✦ {tatemono_tb} 坪")
@@ -506,11 +506,11 @@ JSONのみ返してください:
     with col2:
         bouka   = st.text_input("防火指定", placeholder="例: なし")
         kenri   = st.text_input("土地権利", placeholder="例: 所有権")
-        kansei  = st.text_input("完成時期", placeholder="例: お問い合わせください")
+        kansei  = st.text_input("完成時期", placeholder="例: お問い合わせください", key="inp_kansei")
     with col3:
         fukuin    = st.text_input("幅員／接道", placeholder="例: 公道 北側6m")
-        gakku_sho = st.text_input("学区（小学校）", placeholder="例: 奈良市立○○小学校区")
-        gakku_chu = st.text_input("学区（中学校）", placeholder="例: 奈良市立○○中学校区")
+        gakku_sho = st.text_input("学区（小学校）", placeholder="例: 奈良市立○○小学校区", key="inp_gakku_sho")
+        gakku_chu = st.text_input("学区（中学校）", placeholder="例: 奈良市立○○中学校区", key="inp_gakku_chu")
 
     # ローン情報
     st.markdown("### ローン情報（P5用）")
@@ -520,7 +520,7 @@ JSONのみ返してください:
         hensai  = st.number_input("返済期間（年）", min_value=0, value=0)
     with col2:
         kinri   = st.text_input("金利（%）", placeholder="例: 0.775")
-        monthly = st.number_input("月々の支払例（円）", min_value=0, value=0)
+        monthly = st.number_input("月々の支払例（円）", min_value=0, value=0, key="inp_monthly")
 
     # 生成ボタン
     st.markdown("---")
@@ -623,24 +623,50 @@ with tab_step2:
     st.markdown("## Step2 スクリプト生成（レイヤー名マッチング方式）")
     st.caption("Illustratorのレイヤー名（@titleなど）に直接データを流し込むスクリプトを生成します")
 
+    # ① 入力タブの値をデフォルトとして使用
+    _s2_price_v  = st.session_state.get("inp_price", 0)
+    _s2_loan_v   = st.session_state.get("inp_monthly", 0)
+    _s2_shiki_m2 = st.session_state.get("inp_shikichi_m2", 0.0)
+    _s2_tate_m2  = st.session_state.get("inp_tatemono_m2", 0.0)
+    _s2_price_str = f"{int(_s2_price_v):,}" if _s2_price_v else ""
+    _s2_loan_str  = f"{int(_s2_loan_v):,}" if _s2_loan_v else ""
+    _s2_shiki_tb  = m2_to_tsubo(_s2_shiki_m2)
+    _s2_tate_tb   = m2_to_tsubo(_s2_tate_m2)
+    _s2_shiki_str = f"{_s2_shiki_m2:.2f}㎡（{_s2_shiki_tb}坪）" if _s2_shiki_m2 else ""
+    _s2_tate_str  = f"{_s2_tate_m2:.2f}㎡（{_s2_tate_tb}坪）" if _s2_tate_m2 else ""
+    _s2_station_v = st.session_state.get("inp_station", "")
+    _s2_walk_v    = st.session_state.get("inp_walk_min", 0)
+    _s2_traffic_default = f"{_s2_station_v}\u3000徒歩{_s2_walk_v}分" if _s2_station_v else ""
+
     col1, col2 = st.columns(2)
     with col1:
-        s2_title      = st.text_input("① タイトル", placeholder="例: 奈良市右京３丁目６期１号地")
-        s2_completion = st.text_input("② 完成時期", placeholder="例: 令和9年２月")
-        s2_price      = st.text_input("③ 販売価格（万円）", placeholder="例: 4,980")
-        s2_loan       = st.text_input("④ 月々支払い（円）", placeholder="例: 120,694")
-        s2_address    = st.text_input("⑤ 所在地", placeholder="例: 奈良市右京３丁目7-8")
-        s2_school1    = st.text_input("⑥ 小学校区", placeholder="例: 奈良市立ならやま小学校区")
-        s2_school2    = st.text_input("⑦ 中学校区", placeholder="例: 奈良市立ならやま中学校区")
+        s2_title      = st.text_input("① タイトル", placeholder="例: 奈良市右京３丁目６期１号地",
+                                       value=st.session_state.get("inp_name_jp", ""))
+        s2_completion = st.text_input("② 完成時期", placeholder="例: 令和9年２月",
+                                       value=st.session_state.get("inp_kansei", ""))
+        s2_price      = st.text_input("③ 販売価格（万円）", placeholder="例: 4,980",
+                                       value=_s2_price_str)
+        s2_loan       = st.text_input("④ 月々支払い（円）", placeholder="例: 120,694",
+                                       value=_s2_loan_str)
+        s2_address    = st.text_input("⑤ 所在地", placeholder="例: 奈良市右京３丁目7-8",
+                                       value=st.session_state.get("inp_address", ""))
+        s2_school1    = st.text_input("⑥ 小学校区", placeholder="例: 奈良市立ならやま小学校区",
+                                       value=st.session_state.get("inp_gakku_sho", ""))
+        s2_school2    = st.text_input("⑦ 中学校区", placeholder="例: 奈良市立ならやま中学校区",
+                                       value=st.session_state.get("inp_gakku_chu", ""))
     with col2:
-        s2_land       = st.text_input("⑨ 土地面積", placeholder="例: 169.24㎡（51.2坪）")
-        s2_house      = st.text_input("⑩ 建物面積", placeholder="例: 104.10㎡（31.5坪）")
-        s2_layout     = st.text_input("⑪ 間取り", placeholder="例: 3LDK")
+        s2_land       = st.text_input("⑨ 土地面積", placeholder="例: 169.24㎡（51.2坪）",
+                                       value=_s2_shiki_str)
+        s2_house      = st.text_input("⑩ 建物面積", placeholder="例: 104.10㎡（31.5坪）",
+                                       value=_s2_tate_str)
+        s2_layout     = st.text_input("⑪ 間取り", placeholder="例: 3LDK",
+                                       value=st.session_state.get("inp_madori", ""))
         s2_parking    = st.text_input("⑫ 駐車場", placeholder="例: 2台")
         s2_filename   = st.text_input("ファイル名（.jsx）", placeholder="例: Step2_Ukyo3_6ki1go.jsx", value="Step2_流し込み.jsx")
 
     st.markdown("### ⑧ 交通 / ⑬ 周辺環境（自動リサーチ）")
     s2_addr_for_osm = st.text_input("住所（自動リサーチ用）", placeholder="例: 奈良県奈良市右京3丁目7-8",
+                                     value=st.session_state.get("inp_address", ""),
                                      help="⑧交通と⑬周辺環境の自動取得に使います")
 
     if st.button("🗺 交通・周辺環境を自動取得", use_container_width=True):
@@ -683,7 +709,7 @@ with tab_step2:
 
     col1, col2 = st.columns(2)
     with col1:
-        s2_traffic = st.text_area("⑧ 交通", value=st.session_state.get("s2_traffic", ""),
+        s2_traffic = st.text_area("⑧ 交通", value=st.session_state.get("s2_traffic", _s2_traffic_default),
                                    placeholder="例: 近鉄京都線「高の原」駅 徒歩14分", height=80)
     with col2:
         s2_environment = st.text_area("⑬ 周辺環境", value=st.session_state.get("s2_environment", ""),
